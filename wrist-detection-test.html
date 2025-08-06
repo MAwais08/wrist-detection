@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto-Capture Wrist Detection & Measurement</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .header {
+            margin-bottom: 20px;
+        }
+
+        .title {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1rem;
+            opacity: 0.9;
+            margin-bottom: 15px;
+        }
+
+        .detection-status {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .status-dot.loading { background: #ffa500; animation: pulse 2s infinite; }
+        .status-dot.active { background: #00ff00; animation: pulse 2s infinite; }
+        .status-dot.ready { background: #ffff00; animation: pulse 1.5s infinite; }
+        .status-dot.capturing { background: #ff6600; animation: pulse 0.5s infinite; }
+        .status-dot.error { background: #ff0000; }
+        .status-dot.inactive { background: #666; }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .video-section {
+            position: relative;
+        }
+
+        .video-container {
+            position: relative;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            background: #000;
+        }
+
+        #video {
+            width: 100%;
+            height: auto;
+            display: block;
+            max-height: 500px;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .detection-overlay {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .countdown-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 100, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            font-size: 2rem;
+            font-weight: bold;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(255, 100, 0, 0.5);
+            display: none;
+        }
+
+        .results-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .measurement-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .measurement-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            color: #00ff00;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .measurement-value {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #ffffff;
+        }
+
+        .measurement-detail {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            color: #cccccc;
+        }
+
+        .captured-photos {
+            margin-top: 15px;
+        }
+
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .photo-item {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.1);
+            aspect-ratio: 1;
+        }
+
+        .photo-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .photo-info {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+            color: white;
+            padding: 8px;
+            font-size: 0.75rem;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: linear-gradient(45deg, #2D8C88, #4CAF50);
+            color: white;
+            box-shadow: 0 3px 12px rgba(45, 140, 136, 0.3);
+            min-width: 120px;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(45, 140, 136, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn.secondary {
+            background: linear-gradient(45deg, #666, #888);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00, #ffff00, #ff6600);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            .title { font-size: 1.8rem; }
+            .controls { flex-direction: column; align-items: center; }
+        }
+
+        .wrist-indicator {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 30px;
+            border: 3px solid #ff0000;
+            border-radius: 50%;
+            background: rgba(255, 0, 0, 0.2);
+            animation: wrist-pulse 2s infinite;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        @keyframes wrist-pulse {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            50% { transform: translate(-50%, -50%) scale(1.3); opacity: 0.7; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        .quality-indicator {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">📸 Auto-Capture Wrist Detection</h1>
+            <p class="subtitle">Automatically captures photos when hand is fully detected and measures wrist for product sizing</p>
+        </div>
+
+        <div class="detection-status">
+            <div class="status-item">
+                <div class="status-dot loading" id="mediapipe-status"></div>
+                <span id="mediapipe-text">Loading AI...</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot inactive" id="camera-status"></div>
+                <span id="camera-text">Camera Off</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot inactive" id="detection-status"></div>
+                <span id="detection-text">No Detection</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot inactive" id="capture-status"></div>
+                <span id="capture-text">Ready to Capture</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="canvas"></canvas>
+                    <div id="wrist-indicator" class="wrist-indicator" style="display: none;"></div>
+                    
+                    <div class="detection-overlay">
+                        <div>Hand Quality: <span id="hand-quality">--</span></div>
+                        <div>Landmarks: <span id="landmark-count">0</span>/21</div>
+                    </div>
+                    
+                    <div class="quality-indicator">
+                        Confidence: <span id="confidence-display">0%</span>
+                    </div>
+
+                    <div class="countdown-overlay" id="countdown-overlay">
+                        <div id="countdown-number">3</div>
+                        <div style="font-size: 0.8rem; margin-top: 5px;">Auto Capturing...</div>
+                    </div>
+                </div>
+
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+            </div>
+
+            <div class="results-panel">
+                <div class="measurement-card">
+                    <h3>🤚 Hand Detection</h3>
+                    <div class="measurement-value" id="hand-status-display">No Hand</div>
+                    <div class="measurement-detail" id="hand-details">Show your hand to start detection</div>
+                </div>
+
+                <div class="measurement-card">
+                    <h3>📍 Wrist Position</h3>
+                    <div class="measurement-value" id="wrist-coords">Not Detected</div>
+                    <div class="measurement-detail">Screen coordinates for product placement</div>
+                </div>
+
+                <div class="measurement-card">
+                    <h3>📏 Wrist Measurements</h3>
+                    <div class="measurement-value" id="wrist-size-display">--mm</div>
+                    <div class="measurement-detail">
+                        Width: <span id="wrist-width">--</span>mm | 
+                        Circumference: <span id="wrist-circumference">--</span>mm
+                    </div>
+                </div>
+
+                <div class="measurement-card">
+                    <h3>⚡ Performance</h3>
+                    <div class="measurement-value" id="fps-display">0 FPS</div>
+                    <div class="measurement-detail">Processing: <span id="process-time">0</span>ms</div>
+                </div>
+
+                <div class="captured-photos">
+                    <h3 style="color: #00ff00; margin-bottom: 10px;">📷 Captured Photos (<span id="photo-count">0</span>)</h3>
+                    <div class="photo-grid" id="photo-grid"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="start-btn" onclick="startDetection()">🚀 Start Detection</button>
+            <button class="btn" id="stop-btn" onclick="stopDetection()" disabled>⏹️ Stop</button>
+            <button class="btn secondary" onclick="clearPhotos()">🗑️ Clear Photos</button>
+            <button class="btn secondary" onclick="downloadData()">💾 Download Data</button>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let hands = null;
+        let video = null;
+        let canvas = null;
+        let ctx = null;
+        let isDetecting = false;
+        let capturedPhotos = [];
+        
+        // Auto-capture settings
+        let autoCaptureEnabled = true;
+        let handQualityThreshold = 85; // Minimum confidence for capture
+        let stableFramesRequired = 30; // Frames hand must be stable
+        let stableFrameCount = 0;
+        let captureCountdown = 0;
+        let isCountingDown = false;
+        
+        // Performance tracking
+        let frameCount = 0;
+        let lastFrameTime = 0;
+        let currentFPS = 0;
+        
+        // Wrist measurement data
+        let lastWristMeasurements = null;
+
+        document.addEventListener('DOMContentLoaded', initializeApp);
+
+        async function initializeApp() {
+            console.log('🚀 Initializing Auto-Capture Wrist Detection...');
+            
+            video = document.getElementById('video');
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+
+            try {
+                await initializeMediaPipe();
+                updateStatus('mediapipe', 'active', 'AI Ready');
+            } catch (error) {
+                console.error('❌ MediaPipe initialization failed:', error);
+                updateStatus('mediapipe', 'error', 'AI Failed');
+            }
+        }
+
+        async function initializeMediaPipe() {
+            if (!window.Hands) {
+                throw new Error('MediaPipe Hands not loaded');
+            }
+
+            hands = new Hands({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                }
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.8, // Higher threshold for better quality
+                minTrackingConfidence: 0.7,
+                selfieMode: true
+            });
+
+            hands.onResults(onResults);
+            console.log('✅ MediaPipe initialized successfully');
+        }
+
+        async function startDetection() {
+            if (!hands) {
+                alert('MediaPipe not initialized!');
+                return;
+            }
+
+            try {
+                console.log('📹 Starting camera...');
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    isDetecting = true;
+                    updateStatus('camera', 'active', 'Camera Active');
+                    document.getElementById('start-btn').disabled = true;
+                    document.getElementById('stop-btn').disabled = false;
+                    
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    detectLoop();
+                };
+
+            } catch (error) {
+                console.error('❌ Camera initialization failed:', error);
+                updateStatus('camera', 'error', 'Camera Failed');
+                alert('Camera access denied!');
+            }
+        }
+
+        function stopDetection() {
+            isDetecting = false;
+            
+            if (video.srcObject) {
+                const tracks = video.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+            }
+
+            updateStatus('camera', 'inactive', 'Camera Off');
+            updateStatus('detection', 'inactive', 'No Detection');
+            updateStatus('capture', 'inactive', 'Ready to Capture');
+            
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('stop-btn').disabled = true;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            hideWristIndicator();
+            resetCountdown();
+        }
+
+        async function detectLoop() {
+            if (!isDetecting) return;
+
+            const startTime = performance.now();
+            
+            try {
+                await hands.send({ image: video });
+            } catch (error) {
+                console.warn('Detection error:', error);
+            }
+
+            // Update FPS
+            frameCount++;
+            const currentTime = performance.now();
+            if (currentTime - lastFrameTime >= 1000) {
+                currentFPS = Math.round((frameCount * 1000) / (currentTime - lastFrameTime));
+                document.getElementById('fps-display').textContent = `${currentFPS} FPS`;
+                frameCount = 0;
+                lastFrameTime = currentTime;
+            }
+
+            const processingTime = performance.now() - startTime;
+            document.getElementById('process-time').textContent = Math.round(processingTime);
+
+            requestAnimationFrame(detectLoop);
+        }
+
+        function onResults(results) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                const handedness = results.multiHandedness[0];
+                const confidence = Math.round(handedness.score * 100);
+
+                // Update UI with hand info
+                updateHandDetection(landmarks, handedness, confidence);
+                
+                // Draw landmarks
+                drawLandmarks(landmarks);
+                
+                // Process wrist data
+                const wrist = landmarks[0];
+                const measurements = processWristMeasurements(landmarks);
+                updateWristDisplay(wrist, measurements);
+                showWristIndicator(wrist);
+
+                // Auto-capture logic
+                handleAutoCapture(landmarks, confidence, measurements);
+
+            } else {
+                // No hand detected
+                updateStatus('detection', 'inactive', 'No Detection');
+                document.getElementById('hand-status-display').textContent = 'No Hand';
+                document.getElementById('hand-details').textContent = 'Show your hand to camera';
+                document.getElementById('confidence-display').textContent = '0%';
+                document.getElementById('landmark-count').textContent = '0';
+                hideWristIndicator();
+                resetCountdown();
+                stableFrameCount = 0;
+            }
+        }
+
+        function updateHandDetection(landmarks, handedness, confidence) {
+            updateStatus('detection', 'active', `Detecting (${confidence}%)`);
+            
+            document.getElementById('hand-status-display').textContent = `${handedness.label} Hand`;
+            document.getElementById('hand-details').textContent = `Confidence: ${confidence}% | Quality: ${getQualityLevel(confidence)}`;
+            document.getElementById('confidence-display').textContent = `${confidence}%`;
+            document.getElementById('landmark-count').textContent = '21';
+            document.getElementById('hand-quality').textContent = getQualityLevel(confidence);
+        }
+
+        function getQualityLevel(confidence) {
+            if (confidence >= 90) return 'Excellent';
+            if (confidence >= 80) return 'Good';
+            if (confidence >= 70) return 'Fair';
+            return 'Poor';
+        }
+
+        function processWristMeasurements(landmarks) {
+            try {
+                const wrist = landmarks[0];
+                const thumbBase = landmarks[1];
+                const indexBase = landmarks[5];
+                const middleBase = landmarks[9];
+                const ringBase = landmarks[13];
+                const pinkyBase = landmarks[17];
+
+                // Calculate wrist width (thumb to pinky base)
+                const wristWidth = Math.sqrt(
+                    Math.pow((thumbBase.x - pinkyBase.x) * canvas.width, 2) + 
+                    Math.pow((thumbBase.y - pinkyBase.y) * canvas.height, 2)
+                );
+
+                // Calculate hand span for scaling
+                const handSpan = Math.sqrt(
+                    Math.pow((indexBase.x - pinkyBase.x) * canvas.width, 2) + 
+                    Math.pow((indexBase.y - pinkyBase.y) * canvas.height, 2)
+                );
+
+                // Convert to real-world measurements (calibration)
+                const pixelToMmRatio = 0.2; // Approximate calibration factor
+                const estimatedWristWidthMm = Math.round(wristWidth * pixelToMmRatio);
+                const estimatedWristCircumferenceMm = Math.round(estimatedWristWidthMm * 3.14159);
+
+                // Clamp to realistic values
+                const clampedWidth = Math.max(35, Math.min(75, estimatedWristWidthMm));
+                const clampedCircumference = Math.max(140, Math.min(220, estimatedWristCircumferenceMm));
+
+                return {
+                    widthPx: Math.round(wristWidth),
+                    widthMm: clampedWidth,
+                    circumferenceMm: clampedCircumference,
+                    handSpanPx: Math.round(handSpan),
+                    wristPosition: {
+                        x: Math.round(wrist.x * canvas.width),
+                        y: Math.round(wrist.y * canvas.height),
+                        xPercent: Math.round(wrist.x * 100),
+                        yPercent: Math.round(wrist.y * 100)
+                    }
+                };
+            } catch (error) {
+                console.warn('Error calculating wrist measurements:', error);
+                return null;
+            }
+        }
+
+        function updateWristDisplay(wrist, measurements) {
+            if (!measurements) return;
+
+            document.getElementById('wrist-coords').textContent = 
+                `${measurements.wristPosition.x}, ${measurements.wristPosition.y}`;
+            
+            document.getElementById('wrist-size-display').textContent = `${measurements.widthMm}mm`;
+            document.getElementById('wrist-width').textContent = measurements.widthMm;
+            document.getElementById('wrist-circumference').textContent = measurements.circumferenceMm;
+
+            lastWristMeasurements = measurements;
+        }
+
+        function handleAutoCapture(landmarks, confidence, measurements) {
+            if (!autoCaptureEnabled || !measurements) return;
+
+            // Check if hand quality is good enough
+            const isGoodQuality = confidence >= handQualityThreshold;
+            const isWristInFrame = measurements.wristPosition.xPercent > 20 && 
+                                  measurements.wristPosition.xPercent < 80 &&
+                                  measurements.wristPosition.yPercent > 20 && 
+                                  measurements.wristPosition.yPercent < 80;
+
+            if (isGoodQuality && isWristInFrame) {
+                stableFrameCount++;
+                
+                // Update progress bar
+                const progress = Math.min((stableFrameCount / stableFramesRequired) * 100, 100);
+                document.getElementById('progress-fill').style.width = `${progress}%`;
+
+                if (stableFrameCount >= stableFramesRequired && !isCountingDown) {
+                    startCaptureCountdown();
+                }
+            } else {
+                stableFrameCount = Math.max(0, stableFrameCount - 2); // Decay faster
+                const progress = Math.min((stableFrameCount / stableFramesRequired) * 100, 100);
+                document.getElementById('progress-fill').style.width = `${progress}%`;
+                
+                if (isCountingDown) {
+                    resetCountdown();
+                }
+            }
+        }
+
+        function startCaptureCountdown() {
+            isCountingDown = true;
+            captureCountdown = 3;
+            updateStatus('capture', 'capturing', `Capturing in ${captureCountdown}...`);
+            
+            const countdownEl = document.getElementById('countdown-overlay');
+            const countdownNumber = document.getElementById('countdown-number');
+            countdownEl.style.display = 'block';
+
+            const countdownInterval = setInterval(() => {
+                captureCountdown--;
+                countdownNumber.textContent = captureCountdown;
+                updateStatus('capture', 'capturing', `Capturing in ${captureCountdown}...`);
+
+                if (captureCountdown <= 0) {
+                    clearInterval(countdownInterval);
+                    capturePhoto();
+                    resetCountdown();
+                }
+            }, 1000);
+        }
+
+        function resetCountdown() {
+            isCountingDown = false;
+            captureCountdown = 0;
+            document.getElementById('countdown-overlay').style.display = 'none';
+            updateStatus('capture', 'ready', 'Ready to Capture');
+        }
+
+        function capturePhoto() {
+            if (!lastWristMeasurements) return;
+
+            // Capture the current frame
+            const captureCanvas = document.createElement('canvas');
+            captureCanvas.width = video.videoWidth;
+            captureCanvas.height = video.videoHeight;
+            const captureCtx = captureCanvas.getContext('2d');
+            
+            // Draw video frame
+            captureCtx.drawImage(video, 0, 0);
+            
+            // Draw landmarks overlay
+            captureCtx.drawImage(canvas, 0, 0);
+
+            const photoData = {
+                id: Date.now(),
+                timestamp: new Date().toISOString(),
+                imageData: captureCanvas.toDataURL('image/jpeg', 0.8),
+                measurements: { ...lastWristMeasurements },
+                confidence: document.getElementById('confidence-display').textContent
+            };
+
+            capturedPhotos.push(photoData);
+            displayCapturedPhoto(photoData);
+            
+            updateStatus('capture', 'active', `Captured ${capturedPhotos.length} photos`);
+            
+            // Reset for next capture
+            stableFrameCount = 0;
+            document.getElementById('progress-fill').style.width = '0%';
+            
+            console.log('📸 Photo captured:', photoData);
+        }
+
+        function displayCapturedPhoto(photoData) {
+            const photoGrid = document.getElementById('photo-grid');
+            const photoCount = document.getElementById('photo-count');
+            
+            const photoItem = document.createElement('div');
+            photoItem.className = 'photo-item';
+            photoItem.innerHTML = `
+                <img src="${photoData.imageData}" alt="Captured Hand">
+                <div class="photo-info">
+                    ${photoData.measurements.widthMm}mm<br>
+                    ${photoData.confidence}
+                </div>
+            `;
+            
+            photoGrid.appendChild(photoItem);
+            photoCount.textContent = capturedPhotos.length;
+        }
+
+        function clearPhotos() {
+            capturedPhotos = [];
+            document.getElementById('photo-grid').innerHTML = '';
+            document.getElementById('photo-count').textContent = '0';
+            updateStatus('capture', 'ready', 'Ready to Capture');
+        }
+
+        function downloadData() {
+            if (capturedPhotos.length === 0) {
+                alert('No photos captured yet!');
+                return;
+            }
+
+            const data = {
+                captureSession: {
+                    timestamp: new Date().toISOString(),
+                    totalPhotos: capturedPhotos.length,
+                    averageWristSize: Math.round(
+                        capturedPhotos.reduce((sum, photo) => sum + photo.measurements.widthMm, 0) / capturedPhotos.length
+                    )
+                },
+                photos: capturedPhotos.map(photo => ({
+                    id: photo.id,
+                    timestamp: photo.timestamp,
+                    measurements: photo.measurements,
+                    confidence: photo.confidence
+                    // Note: image data excluded from JSON for size
+                }))
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `wrist-measurements-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function drawLandmarks(landmarks) {
+            // Draw connections
+            const connections = [
+                [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
+                [0, 5], [5, 6], [6, 7], [7, 8], // Index
+                [5, 9], [9, 10], [10, 11], [11, 12], // Middle
+                [9, 13], [13, 14], [14, 15], [15, 16], // Ring
+                [13, 17], [17, 18], [18, 19], [19, 20], // Pinky
+                [0, 17] // Palm
+            ];
+
+            // Draw hand skeleton
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 2;
+            connections.forEach(([start, end]) => {
+                const startPoint = landmarks[start];
+                const endPoint = landmarks[end];
+                
+                ctx.beginPath();
+                ctx.moveTo(startPoint.x * canvas.width, startPoint.y * canvas.height);
+                ctx.lineTo(endPoint.x * canvas.width, endPoint.y * canvas.height);
+                ctx.stroke();
+            });
+
+            // Draw landmark points
+            landmarks.forEach((landmark, index) => {
+                const x = landmark.x * canvas.width;
+                const y = landmark.y * canvas.height;
+                
+                ctx.fillStyle = index === 0 ? '#ff0000' : '#00ff00'; // Wrist is red
+                ctx.beginPath();
+                ctx.arc(x, y, index === 0 ? 8 : 4, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Highlight wrist with special indicator
+                if (index === 0) {
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 15, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    
+                    // Add wrist label
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('WRIST', x, y - 25);
+                }
+            });
+
+            // Draw measurement lines for wrist width
+            if (landmarks.length >= 18) {
+                const wrist = landmarks[0];
+                const thumbBase = landmarks[1];
+                const pinkyBase = landmarks[17];
+                
+                // Draw measurement line
+                ctx.strokeStyle = '#ffff00';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(thumbBase.x * canvas.width, thumbBase.y * canvas.height);
+                ctx.lineTo(pinkyBase.x * canvas.width, pinkyBase.y * canvas.height);
+                ctx.stroke();
+                ctx.setLineDash([]); // Reset dash pattern
+                
+                // Add measurement text
+                const midX = (thumbBase.x + pinkyBase.x) / 2 * canvas.width;
+                const midY = (thumbBase.y + pinkyBase.y) / 2 * canvas.height;
+                
+                ctx.fillStyle = '#ffff00';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 3;
+                ctx.strokeText('WRIST WIDTH', midX, midY - 10);
+                ctx.fillText('WRIST WIDTH', midX, midY - 10);
+            }
+        }
+
+        function showWristIndicator(wrist) {
+            const indicator = document.getElementById('wrist-indicator');
+            const x = wrist.x * 100;
+            const y = wrist.y * 100;
+            
+            indicator.style.display = 'block';
+            indicator.style.left = `${x}%`;
+            indicator.style.top = `${y}%`;
+        }
+
+        function hideWristIndicator() {
+            document.getElementById('wrist-indicator').style.display = 'none';
+        }
+
+        function updateStatus(type, status, text) {
+            const dot = document.getElementById(`${type}-status`);
+            const textEl = document.getElementById(`${type}-text`);
+            
+            if (dot) dot.className = `status-dot ${status}`;
+            if (textEl) textEl.textContent = text;
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (event) => {
+            switch(event.key) {
+                case ' ': // Spacebar to toggle detection
+                    event.preventDefault();
+                    if (isDetecting) {
+                        stopDetection();
+                    } else {
+                        startDetection();
+                    }
+                    break;
+                case 'c': // C to clear photos
+                    if (event.ctrlKey) {
+                        event.preventDefault();
+                        clearPhotos();
+                    }
+                    break;
+                case 's': // Ctrl+S to download data
+                    if (event.ctrlKey) {
+                        event.preventDefault();
+                        downloadData();
+                    }
+                    break;
+            }
+        });
+
+        // Handle page cleanup
+        window.addEventListener('beforeunload', () => {
+            stopDetection();
+        });
+
+        // Mobile responsive adjustments
+        window.addEventListener('resize', () => {
+            if (isDetecting && video.videoWidth && video.videoHeight) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+            }
+        });
+
+        // Initialize quality threshold from URL parameter if provided
+        const urlParams = new URLSearchParams(window.location.search);
+        const threshold = urlParams.get('threshold');
+        if (threshold && !isNaN(threshold)) {
+            handQualityThreshold = Math.max(50, Math.min(95, parseInt(threshold)));
+            console.log(`🎯 Quality threshold set to: ${handQualityThreshold}%`);
+        }
+    </script>
+
+    <!-- Instructions Panel -->
+    <div style="margin-top: 30px; max-width: 800px; background: rgba(255,255,255,0.1); border-radius: 15px; padding: 20px; backdrop-filter: blur(10px);">
+        <h3 style="color: #00ff00; margin-bottom: 15px;">📋 How It Works</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; font-size: 0.9rem;">
+            <div>
+                <strong>1. Auto Detection</strong><br>
+                Show your hand clearly to camera. System detects 21 landmarks automatically.
+            </div>
+            <div>
+                <strong>2. Quality Check</strong><br>
+                Hand must be stable for 30 frames with >85% confidence for auto-capture.
+            </div>
+            <div>
+                <strong>3. Wrist Measurement</strong><br>
+                Calculates wrist width and circumference from landmark positions.
+            </div>
+            <div>
+                <strong>4. Auto Capture</strong><br>
+                Takes photo automatically when hand is perfectly positioned and stable.
+            </div>
+        </div>
+        
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.3);">
+            <strong>💡 Tips for Best Results:</strong><br>
+            • Use good lighting • Keep hand steady • Position wrist in center • Wait for green indicators
+        </div>
+        
+        <div style="margin-top: 10px;">
+            <strong>⌨️ Shortcuts:</strong> Spacebar = Start/Stop | Ctrl+C = Clear Photos | Ctrl+S = Download Data
+        </div>
+    </div>
+</body>
+</html>
